@@ -1,42 +1,44 @@
-function varargout = permcca(varargin)
+function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,ncompY,ncompX,K,varargin)
 % Permutation inference for canonical correlation
 % analysis (CCA).
 %
 % Usage:
-% [pfwer,r,A,B,U,V] = permcca(Y,X,nP,Z,W,Sel,partial,permsetY,permsetX,ncompY,ncompX)
+% [pfwer,r,A,B,U,V] = permcca(Y,X,nP,Z,W,Sel,partial,permsetY,permsetX,ncompY,ncompX,K,varargin)
 %
 %
 % Inputs:
 % - Y        : Left set of variables, size N by P.
 % - X        : Right set of variables, size N by Q.
-% - nP       : An integer representing the number
-%              of permutations.
+% - nP       : An integer representing the number of permutations.
 %              Default is 1000 permutations.
-% - Z        : (Optional) Nuisance variables for
-%              both (partial CCA) or left side
-%              (part CCA) only.
-% - W        : (Optional) Nuisance variables for the
-%              right side only (bipartial CCA).
-% - Sel      : (Optional) Selection matrix or a selection vector,
-%              to use Theil's residuals instead of Huh-Jhun's
-%              projection. If specified as a vector, it can be
-%              made of integer indices or logicals.
-%              The R unselected rows of Z (S of W) must be full
+% - Z        : (Optional) Nuisance variables for both (partial CCA) or left 
+%              side (part CCA) only.
+% - W        : (Optional) Nuisance variables for the right side only 
+%              (bipartial CCA).
+% - Sel      : (Optional) Selection matrix or a selection vector, to use 
+%              Theil's residuals instead of Huh-Jhun's projection. If
+%              specified as a vector, it can be made of integer indices or
+%              logicals. The R unselected rows of Z (S of W) must be full
 %              rank. Use -1 to randomly select N-R (or N-S) rows.
-% - partial  : (Optional) Boolean indicating whether
-%              this is partial (true) or part (false) CCA.
-%              Default is true, i.e., partial CCA.
-% - permsetY : (Optional) Matrix with predefined permutations for left set of 
-%              variables (permutations should be stored in columns). 
+% - partial  : (Optional) Boolean indicating whether this is partial (true) 
+%              or part (false) CCA. Default is true, i.e., partial CCA.
+% - statistic: (Optional) which statistic to use for statistical testing:
+%              - 'wilks' for Wilns' lambda or
+%              - 'roy' for Roy's largest root
+%              Default: 'wilks'
+% - permsetY : (Optional) Matrix with predefined permutations for left set
+%              of variables (permutations should be stored in columns). 
 %              Note: number of rows should equal number of selected rows.
-% - permsetX : (Optional) Matrix with predefined permutations for right set of
-%              variables (permutations should be stored in columns). If only 
-%              permsetY is provided, permsetX = permsetY.
+% - permsetX : (Optional) Matrix with predefined permutations for right set
+%              of variables (permutations should be stored in columns).
 %              Note: number of rows should equal number of selected rows.
-% - ncompY   : (Optional) Number of components after dimensionality reduction using 
-%              SVD on left side.
-% - ncompX   : (Optional) Number of components after dimensionality reduction using 
-%              SVD on right side.
+% - ncompY   : (Optional) Number of components after dimensionality 
+%              reduction using SVD on left side.
+% - ncompX   : (Optional) Number of components after dimensionality 
+%              reduction using SVD on right side.
+% - K        : (Optional) How many components to estimate
+% - varargin : other arguments passed to penalized_cca.m; note that
+%              cross-validation if performed only for initial CCA solution
 %
 % Outputs:
 % - p   : p-values, FWER corrected via closure.
@@ -51,59 +53,42 @@ function varargout = permcca(varargin)
 % NIH - Univ. of Geneva - Univ. of Oxford
 % Mar/2020
 
+%	~~~~~~~~~~~~~~~~~~
+%
+% 	Changelog
+%   2021-01-13 Andraz Matkovic
+%              Added K parameter. Use penalized_cca function instead of svd
+%              to estimate component weights.
+
 % Read input arguments
-narginchk(2,11)
-Y = varargin{1};
-X = varargin{2};
-if nargin >= 3
-    nP = varargin{3};
-end
-if nargin >= 4
-    Z = varargin{4};
+narginchk(2,18)
+%Y = varargin{1};
+%X = varargin{2};
+% if nargin >= 3
+%     nP = varargin{3};
+% end
+if nargin < 4;                     Z = [];         end
+if nargin < 5;                     W = [];         end
+if nargin < 6;                     Sel = [];       end
+if nargin < 7 || isempty(statistic); statistic = 'wilks'; end
+if nargin < 8 || isempty(partial); partial = true; end
+if nargin < 9 || isempty(permsetY)
+    permsetY = false;
 else
-    Z = [];
-end
-if nargin >= 5
-    W = varargin{5};
-else
-    W = [];
-end
-if nargin >= 6
-    Sel = varargin{6};
-else
-    Sel = [];
-end
-if nargin >= 7
-    partial = varargin{7};
-else
-    partial = true;
-end
-if nargin >= 8
-    permsetY = varargin{8};
     if size(permsetY,2) < nP
         error("permsetY does not contain enough permutations.")
     end
-else
-    permsetY = false;
 end
-if nargin >= 9
-    permsetX = varargin{9};
+if nargin < 10 || isempty(permsetX)
+    permsetX = false;
+else
     if size(permsetX,2) < nP
         error("permsetX does not contain enough permutations.")
     end
-else
-    permsetX = false;
 end
-if nargin >= 10
-    ncompY = varargin{10};
-else
-    ncompY = false;
-end
-if nargin >= 11
-    ncompX = varargin{11};
-else
-    ncompX = false;
-end
+if nargin < 11 || isempty(ncompY); ncompY = false; end
+if nargin < 12 || isempty(ncompX); ncompX = false; end
+if nargin < 13 || isempty(K);      K      = min(rank(Y),rank(X)); end
 
 Ny = size(Y,1);
 Nx = size(X,1);
@@ -158,49 +143,60 @@ if ncompX
 end
 
 % Initial CCA
-[A,B,r] = cca(Qz*Y,Qw*X,R,S);
+switch statistic
+    case 'wilks'
+        Kinit = min(rank(Y),rank(X));
+    case 'roy'
+        Kinit = K;
+end
+[A,B,r,optionsY,optionsX] = cca(Qz*Y,Qw*X,R,S,Kinit,varargin{:});
 K = numel(r);
 U = Y*[A null(A')];
 V = X*[B null(B')];
 
+% First permutation is no permutation
+fprintf('Permutation %d/%d ',1,nP);
+    
+idxY = (1:P);
+idxX = (1:Q);
+
 % Initialise counter
 cnt = zeros(1,K);
 lW  = zeros(1,K);
+% For each canonical variable
+for k = 1:K
+    [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,optionsY,optionsX,varargin{3:end});
+    lW(k) = lWtmp(1);
+end
+lW1 = lW;
+cnt = cnt + (lW >= lW1);
+fprintf('\n');
 
 % For each permutation
-for p = 1:nP
-    fprintf('Permutation %d/%d: ',p,nP);
-    
-    % First permutation is no permutation
-    if p == 1
-        idxY = (1:P);
-        idxX = (1:Q);
+parfor p = 2:(nP-1) 
+    if permsetY
+        idxY = permsetY(:,p);
     else
-        if permsetY
-            idxY = permsetY(:,p);
-        else
-            idxY = randperm(P);
-        end
-        if permsetX
-            idxX = permsetX(:,p);
-        else
-            idxX = randperm(Q);
-        end
+        idxY = randperm(P);
     end
+    if permsetX
+        idxX = permsetX(:,p);
+    else
+        idxX = randperm(Q);
+    end
+    fprintf('Permutation %d/%d ',p,nP);
     
     % For each canonical variable
+    lW  = zeros(1,K);
     for k = 1:K
-        fprintf('%d ',k);
-        [~,~,rperm] = cca(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S);
-        lWtmp = -fliplr(cumsum(fliplr(log(1-rperm.^2))));
+        [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,optionsY,optionsX,varargin{3:end});
         lW(k) = lWtmp(1);
-    end
-    if p == 1
-        lW1 = lW;
     end
     cnt = cnt + (lW >= lW1);
     fprintf('\n');
 end
+
+
 punc  = cnt/nP;
 varargout{1} = cummax(punc); % pfwer
 varargout{2} = r;            % canonical correlations
@@ -268,14 +264,18 @@ else
 end
 
 % =================================================================
-function [A,B,cc] = cca(Y,X,R,S)
+function [A,B,cc,optionsY,optionsX] = cca(Y,X,R,S,K,varargin)
 % Compute CCA.
 N = size(Y,1);
 [Qy,Ry,iY] = qr(Y,0);
 [Qx,Rx,iX] = qr(X,0);
-K  = min(rank(Y),rank(X));
-[L,D,M] = svds(Qy'*Qx,K);
-cc = min(max(diag(D(:,1:K))',0),1);
+
+%K  = min(rank(Y),rank(X));
+%[L,D,M] = svds(Qy'*Qx,K);
+%cc = min(max(diag(D(:,1:K))',0),1);
+
+[~,~,L,M,cc,optionsY,optionsX] = penalized_cca(Qy,Qx,K,varargin{:});
+
 A  = Ry\L(:,1:K)*sqrt(N-R);
 B  = Rx\M(:,1:K)*sqrt(N-S);
 A(iY,:) = A;
@@ -287,3 +287,15 @@ function X = center(X)
 icte = sum(diff(X,1,1).^2,1) == 0;
 X = bsxfun(@minus,X,mean(X,1));
 X(:,icte) = [];
+
+
+function [stat] = compute_statistic(Y,X,R,S,statistic,optionsY,optionsX,varargin)
+    
+switch statistic
+    case 'wilks'
+        [~,~,rperm] = cca(Y,X,R,S,[],optionsY,optionsX,varargin{3:end});
+        stat = -fliplr(cumsum(fliplr(log(1-rperm.^2))));
+    case 'roy'
+        [~,~,rperm] = cca(Y,X,R,S,1,optionsY,optionsX,varargin{3:end});
+        stat = rperm(1)^2;
+end
