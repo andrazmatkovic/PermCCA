@@ -33,7 +33,13 @@ function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,K,optionsX,optionsY,k
 %               because usually only first few modes capture relevant
 %               covariaton between X and Y
 %               [min(P,Q)]
-% --optionsX    struct; arguments passed to glmnet for X; 
+% --optionsX    struct; arguments lambda and alpha passed to glmnet or 
+%               Matlab's lasso function for X; e.g.
+%
+%               Default:
+%
+%                   optionsX.lambda = 0; 
+%                   optionsX.alpha = 1;
 %
 %               - if length(optionsX) == 1, same value is used for all
 %                 components, otherwise different values can be set for each
@@ -43,7 +49,6 @@ function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,K,optionsX,optionsY,k
 %               - if multiple values of options.lambda are supplied cross
 %                 validation is performed and best fitting lambda is selected
 %
-%               Default: optionsX.lambda = 0;
 % --optionsY    struct; arguments passed to glmnet for Y; same as for
 %               optionsX
 % --kfold       number of folds for cross validation [5]
@@ -118,8 +123,12 @@ P = size(X,2);
 Q = size(Y,2);
 
 if nargin < 3 || isempty(K) || K > min(P,Q); K        = min(P,Q); end
-if nargin < 4 || isempty(optionsX);          optionsX.lambda = 0; end
-if nargin < 5 || isempty(optionsY);          optionsY.lambda = 0; end
+if nargin < 4 || isempty(optionsX);          optionsX.lambda = 0; optionsX.alpha = 1; end
+if nargin < 5 || isempty(optionsY);          optionsY.lambda = 0; optionsY.alpha = 1; end
+if ~isfield(optionsX,'alpha');  optionsX.alpha  = 1; end
+if ~isfield(optionsY,'alpha');  optionsY.alpha  = 1; end
+if ~isfield(optionsX,'lambda'); optionsX.lambda = 0; end
+if ~isfield(optionsY,'lambda'); optionsY.lambda = 0; end
 if nargin < 6 || isempty(kfold);             kfold    = 5;        end
 if nargin < 7 || isempty(max_iter);          max_iter = 0;        end
 if nargin < 8 || isempty(tol);               tol      = 0.00001;  end
@@ -208,8 +217,7 @@ while critR > tol
     end
 
     % least squares fit
-    Ak_tmp_fit = glmnet(X, v, 'gaussian', optionsX);
-    Ak_tmp     = Ak_tmp_fit.beta;
+    Ak_tmp = elasticnet(X,v,optionsX);
 
     u  = X*Ak_tmp;
     Ak = Ak_tmp / sqrt(var(u)); % normalize variance
@@ -223,8 +231,7 @@ while critR > tol
     end
 
     % least squares fit
-    Bk_tmp_fit = glmnet(Y, u, 'gaussian', optionsY);
-    Bk_tmp     = Bk_tmp_fit.beta;
+    Bk_tmp = elasticnet(Y,u,optionsY);
     
     v  = Y*Bk_tmp;
     Bk = Bk_tmp / sqrt(var(v)); % normalize variance
@@ -261,5 +268,16 @@ Rk = corr(uk,vk);
 N  = size(uk,1);
 
 error = norm((uk - Rk.*vk),2) ./ N;
+
+end
+
+function [B] = elasticnet(X,y,options)
+
+if exist('OCTAVE_VERSION', 'builtin') ~= 0
+    B_fit = glmnet(X, v, 'gaussian', options);
+    B     = B_fit.beta;
+else
+    B = lasso(X,y,'Lambda',options.lambda,'Alpha',options.alpha);
+end
 
 end
