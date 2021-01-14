@@ -47,6 +47,8 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 % - B   : Canonical coefficients, right side.
 % - U   : Canonical variables, left side.
 % - V   : Canonical variables, right side.
+% - optionsY : Elastic net parameters for left side (Y)
+% - optionsX : Elastic net parameters for right side (X)
 %
 % ___________________________________________
 % AM Winkler, O Renaud, SM Smith, TE Nichols
@@ -204,6 +206,8 @@ varargout{3} = A;            % canonical weights (left)
 varargout{4} = B;            % canonical weights (right)
 varargout{5} = Qz*Y*A;       % canonical variables (left)
 varargout{6} = Qw*X*B;       % canonical variables (right)
+varargout{7} = optionsY;     % elastic net parameters (left)
+varargout{8} = optionsX;     % elastic net parameters (right)
 
 % =================================================================
 function Q = semiortho(Z,Sel)
