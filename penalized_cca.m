@@ -1,4 +1,4 @@
-function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,optionsX,optionsY,K,kfold,max_iter,tol)
+function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,K,optionsX,optionsY,kfold,max_iter,tol)
 %
 % Fit regularized CCA using alternating least squares algorithm (Polajnar,
 % 2020). Aim of CCA is to find maximally correlated pairs canonical vectors
@@ -28,28 +28,31 @@ function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,optionsX,optionsY,K,k
 % 
 % --X           N x P data matrix
 % --Y           N x Q data matrix
-% --optionsX    struct; arguments passed to glmnet for X; 
-%               if length(optionsX) == 1, same value is used for all
-%               components, otherwise different values can be set for each
-%               component;
-%               if length(optionsX) > 1 && length(optionsX) < K, last value
-%               is recycled for subsequent components;
-%               if multiple values of options.lambda are supplied cross
-%               validation is performed and best fitting lambda is selected
-% --optionsY    struct; arguments passed to glmnet for Y; same as for
-%               optionsX
 % --K           how many components to fit; by default it fits all possible 
 %               canonical modes, but this can be lowered to save time, 
 %               because usually only first few modes capture relevant
 %               covariaton between X and Y
 %               [min(P,Q)]
+% --optionsX    struct; arguments passed to glmnet for X; 
+%
+%               - if length(optionsX) == 1, same value is used for all
+%                 components, otherwise different values can be set for each
+%                 component;
+%               - if length(optionsX) > 1 && length(optionsX) < K, last value
+%                 is recycled for subsequent components;
+%               - if multiple values of options.lambda are supplied cross
+%                 validation is performed and best fitting lambda is selected
+%
+%               Default: optionsX.lambda = 0;
+% --optionsY    struct; arguments passed to glmnet for Y; same as for
+%               optionsX
 % --kfold       number of folds for cross validation [5]
-% --tol         converge tolerance [0.00001]; this relates to the
-%               difference in canonical correlation at which estimation of
-%               weights can be stopped
 % --max_iter    if max_iter ~= 0, random search is performed instead of
 %               grid search, such that only max_iter parameter combinations
 %               are tested [0]
+% --tol         converge tolerance [0.00001]; this relates to the
+%               difference in canonical correlation at which estimation of
+%               weights can be stopped
 %
 % OUTPUTS
 % =======
@@ -103,7 +106,7 @@ function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,optionsX,optionsY,K,k
 %   2021-01-12 Andraz Matkovic
 %              Initial version.
 
-narginchk(4,8);
+narginchk(2,8);
 
 rng(10);
 
@@ -114,7 +117,9 @@ N = size(X,1);
 P = size(X,2);
 Q = size(Y,2);
 
-if nargin < 5 || isempty(K) || K > min(P,Q); K        = min(P,Q); end
+if nargin < 3 || isempty(K) || K > min(P,Q); K        = min(P,Q); end
+if nargin < 4 || isempty(optionsX);          optionsX.lambda = 0; end
+if nargin < 5 || isempty(optionsY);          optionsY.lambda = 0; end
 if nargin < 6 || isempty(kfold);             kfold    = 5;        end
 if nargin < 7 || isempty(max_iter);          max_iter = 0;        end
 if nargin < 8 || isempty(tol);               tol      = 0.00001;  end
@@ -143,7 +148,7 @@ for k=1:K
     else
         % cross validate
         grid = combvec(optionsX(k).lambda, optionsY(k).lambda);
-        if max_iter > 0
+        if max_iter > 0 % random search
            grid = grid(:,randperm(max_iter));
            grid = grid(:,1:max_iter);
         end
@@ -181,7 +186,7 @@ for k=1:K
     
 end
 
-R = abs(diag(corr(U,V)));
+R = abs(diag(corr(U,V)))';
 
 end
 
