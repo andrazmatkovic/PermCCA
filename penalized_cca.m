@@ -101,8 +101,11 @@ function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,K,optionsX,optionsY,k
 % DEPENDENCY
 % ==========
 %
-% Glmnet for Matlab (2013) Qian, J., Hastie, T., Friedman, J., Tibshirani,
-%   R. and Simon, N. http://www.stanford.edu/~hastie/glmnet_matlab/
+% - glmnet is a dependency only if Octave is being used
+%
+%   Glmnet for Matlab (2013) Qian, J., Hastie, T., Friedman, J., Tibshirani,
+%       R. and Simon, N. http://www.stanford.edu/~hastie/glmnet_matlab/
+% 
 
 
 %	~~~~~~~~~~~~~~~~~~
