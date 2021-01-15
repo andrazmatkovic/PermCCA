@@ -277,7 +277,7 @@ end
 function [B] = elasticnet(X,y,options)
 
 if exist('OCTAVE_VERSION', 'builtin') ~= 0
-    B_fit = glmnet(X, v, 'gaussian', options);
+    B_fit = glmnet(X, y, 'gaussian', options);
     B     = B_fit.beta;
 else
     B = lasso(X,y,'Lambda',options.lambda,'Alpha',options.alpha);
