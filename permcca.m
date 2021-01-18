@@ -208,6 +208,7 @@ varargout{5} = Qz*Y*A;       % canonical variables (left)
 varargout{6} = Qw*X*B;       % canonical variables (right)
 varargout{7} = optionsY;     % elastic net parameters (left)
 varargout{8} = optionsX;     % elastic net parameters (right)
+varargout{9} = cv;           % cross validation results
 
 % =================================================================
 function Q = semiortho(Z,Sel)
@@ -268,22 +269,23 @@ else
 end
 
 % =================================================================
-function [A,B,cc,optionsY,optionsX] = cca(Y,X,R,S,K,varargin)
+function [A,B,cc,optionsY,optionsX,cv] = cca(Y,X,R,S,K,varargin)
 % Compute CCA.
-N = size(Y,1);
-[Qy,Ry,iY] = qr(Y,0);
-[Qx,Rx,iX] = qr(X,0);
+%N = size(Y,1);
+%[Qy,Ry,iY] = qr(Y,0);
+%[Qx,Rx,iX] = qr(X,0);
 
 %K  = min(rank(Y),rank(X));
 %[L,D,M] = svds(Qy'*Qx,K);
 %cc = min(max(diag(D(:,1:K))',0),1);
 
-[~,~,L,M,cc,optionsY,optionsX] = penalized_cca(Qy,Qx,K,varargin{:});
+[~,~,A,B,cc,optionsY,optionsX,cv] = penalized_cca(Y,X,K,varargin{:});
+%[~,~,L,M,cc,optionsY,optionsX,cv] = penalized_cca(Qy,Qx,K,varargin{:});
 
-A  = Ry\L(:,1:K)*sqrt(N-R);
-B  = Rx\M(:,1:K)*sqrt(N-S);
-A(iY,:) = A;
-B(iX,:) = B;
+%A  = Ry\L(:,1:K)*sqrt(N-R);
+%B  = Rx\M(:,1:K)*sqrt(N-S);
+%A(iY,:) = A;
+%B(iX,:) = B;
 
 % =================================================================
 function X = center(X)

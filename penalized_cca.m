@@ -1,4 +1,4 @@
-function [U,V,A,B,R,optionsX,optionsY] = penalized_cca(X,Y,K,optionsX,optionsY,kfold,max_iter,tol)
+function [U,V,A,B,R,optionsX,optionsY,cv] = penalized_cca(X,Y,K,optionsX,optionsY,kfold,max_iter,tol)
 %
 % Fit regularized CCA using alternating least squares algorithm (Polajnar,
 % 2020). Aim of CCA is to find maximally correlated pairs canonical vectors
@@ -128,13 +128,14 @@ Q = size(Y,2);
 if nargin < 3 || isempty(K) || K > min(P,Q); K        = min(P,Q); end
 if nargin < 4 || isempty(optionsX);          optionsX.lambda = 0; optionsX.alpha = 1; end
 if nargin < 5 || isempty(optionsY);          optionsY.lambda = 0; optionsY.alpha = 1; end
-if ~isfield(optionsX,'alpha');  optionsX.alpha  = 1; end
-if ~isfield(optionsY,'alpha');  optionsY.alpha  = 1; end
-if ~isfield(optionsX,'lambda'); optionsX.lambda = 0; end
-if ~isfield(optionsY,'lambda'); optionsY.lambda = 0; end
 if nargin < 6 || isempty(kfold);             kfold    = 5;        end
 if nargin < 7 || isempty(max_iter);          max_iter = 0;        end
 if nargin < 8 || isempty(tol);               tol      = 0.00001;  end
+
+if ~isfield(optionsX,'alpha');               optionsX.alpha  = 1; end
+if ~isfield(optionsY,'alpha');               optionsY.alpha  = 1; end
+if ~isfield(optionsX,'lambda');              optionsX.lambda = 0; end
+if ~isfield(optionsY,'lambda');              optionsY.lambda = 0; end
 
 A = NaN(P,K);
 B = NaN(Q,K);
@@ -153,44 +154,49 @@ if length(optionsY) < K
     end
 end
 
+cv = struct();
 for k=1:K
     
     if length(optionsX(k).lambda) == 1 && length(optionsY(k).lambda) == 1
         [A, B, U, V] = innerloop(X,Y,A,B,U,V,optionsX(k),optionsY(k),tol,k);
     else
         % cross validate
-        grid = combvec(optionsX(k).lambda, optionsY(k).lambda);
-        if max_iter > 0 % random search
-           grid = grid(:,randperm(max_iter));
-           grid = grid(:,1:max_iter);
+        cv(k).grid = make_grid(optionsX(k).lambda, optionsY(k).lambda);
+        grid_idx = 1:numel(cv(k).grid);
+        if max_iter > 0 && max_iter < numel(cv(k).grid) % random search
+            grid_idx = randperm(numel(cv(k).grid));
+            grid_idx = grid_idx(1:max_iter);
+            grid_idx = sort(grid_idx);  
         end
         
-        errorgrid = NaN(size(grid,2),1);
+        cv(k).errorgrid = NaN(size(cv(k).grid));
         
-        for i=1:size(grid,2) % do not change to parfor before comparing the results between non-parallelized and parallelized forms
+        for i=grid_idx % do not change to parfor before comparing the results between non-parallelized and parallelized forms
             optionsX_tmp = optionsX(k);
             optionsY_tmp = optionsY(k);
-            optionsX_tmp.lambda = grid(1,i);
-            optionsY_tmp.lambda = grid(2,i);
+            tmp_lambdas = cv(k).grid(i);
+            optionsX_tmp.lambda = tmp_lambdas{1}(1);
+            optionsY_tmp.lambda = tmp_lambdas{1}(2);
             
             folds = reshape(randperm(N-mod(N,kfold)),[],kfold)';
             error = NaN(kfold,1);
-            for j=1:kfold
+            parfor j=1:kfold
 
                 
                 trainidx = folds(j,:);
                 testidx  = folds(1:kfold ~= j,:); testidx = testidx(:);
-
+                
                 [A_tmp, B_tmp, ~, ~] = innerloop(X(trainidx,:),Y(trainidx,:),A,B,U(trainidx,:),V(trainidx,:),optionsX_tmp,optionsY_tmp,tol,k);
                 error(j) = MSPE(X(testidx,:)*A_tmp(:,k),Y(testidx,:)*B_tmp(:,k));
             end
-            errorgrid(i) = mean(error);
+            cv(k).errorgrid(i) = mean(error);
         end
         
          % save best parameters
-         [~, min_i] = min(errorgrid);
-         optionsX(k).lambda = grid(1,min_i);
-         optionsY(k).lambda = grid(2,min_i);
+         [~, min_i] = min(cv(k).errorgrid(:));
+         best_lambdas = cv(k).grid(min_i);
+         optionsX(k).lambda = best_lambdas{1}(1);
+         optionsY(k).lambda = best_lambdas{1}(2);
          
          % fit once again using best parameters
          [A, B, U, V] = innerloop(X,Y,A,B,U,V,optionsX(k),optionsY(k),tol,k);
@@ -275,12 +281,28 @@ error = norm((uk - Rk.*vk),2) ./ N;
 end
 
 function [B] = elasticnet(X,y,options)
+% Select elastic net solver.
 
 if exist('OCTAVE_VERSION', 'builtin') ~= 0
     B_fit = glmnet(X, y, 'gaussian', options);
     B     = B_fit.beta;
 else
     B = lasso(X,y,'Lambda',options.lambda,'Alpha',options.alpha);
+end
+
+end
+
+function [grid] = make_grid(a,b)
+% Make a grid of numbers from vectors a and b.
+%
+% --a   vector
+% --b   vector
+
+grid = cell(numel(a),numel(b));
+for i=1:numel(a)
+    for j=1:numel(a)
+        grid(i,j) = {[a(i) b(j)]};
+    end
 end
 
 end
