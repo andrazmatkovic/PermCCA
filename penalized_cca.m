@@ -48,6 +48,7 @@ function [U,V,A,B,R,optionsX,optionsY,cv] = penalized_cca(X,Y,K,optionsX,options
 %                 is recycled for subsequent components;
 %               - if multiple values of options.lambda are supplied cross
 %                 validation is performed and best fitting lambda is selected
+%               - if optionsX.alpha = Inf, soft-thresholding is used
 %
 % --optionsY    struct; arguments passed to glmnet for Y; same as for
 %               optionsX
@@ -283,7 +284,9 @@ end
 function [B] = elasticnet(X,y,options)
 % Select elastic net solver.
 
-if exist('OCTAVE_VERSION', 'builtin') ~= 0
+if options.alpha == Inf % soft-thresholding
+    B = max([(abs(X'*y) - options.lambda/2) zeros(size(X,2),1)],[],2) .* sign(X'*y);
+elseif exist('OCTAVE_VERSION', 'builtin') ~= 0
     B_fit = glmnet(X, y, 'gaussian', options);
     B     = B_fit.beta;
 else
