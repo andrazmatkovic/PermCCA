@@ -152,6 +152,7 @@ switch statistic
         Kinit = K;
 end
 [A,B,r,optionsY,optionsX] = cca(Qz*Y,Qw*X,R,S,Kinit,varargin{:});
+[A,B,r,optionsY,optionsX,cv] = cca(Qz*Y,Qw*X,R,S,Kinit,varargin{:});
 K = numel(r);
 U = Y*[A null(A')];
 V = X*[B null(B')];
