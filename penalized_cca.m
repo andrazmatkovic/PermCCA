@@ -181,7 +181,7 @@ for k=1:K
             
             folds = reshape(randperm(N-mod(N,kfold)),[],kfold)';
             error = NaN(kfold,1);
-            parfor j=1:kfold
+            for j=1:kfold
 
                 
                 testidx = folds(j,:)';
