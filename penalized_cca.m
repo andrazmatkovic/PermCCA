@@ -184,8 +184,8 @@ for k=1:K
             parfor j=1:kfold
 
                 
-                trainidx = folds(j,:);
-                testidx  = folds(1:kfold ~= j,:); testidx = testidx(:);
+                testidx = folds(j,:)';
+                trainidx  = folds(1:kfold ~= j,:); trainidx = trainidx(:);
                 
                 [A_tmp, B_tmp, ~, ~] = innerloop(X(trainidx,:),Y(trainidx,:),A,B,U(trainidx,:),V(trainidx,:),optionsX_tmp,optionsY_tmp,tol,k);
                 error(j) = MSPE(X(testidx,:)*A_tmp(:,k),Y(testidx,:)*B_tmp(:,k));
