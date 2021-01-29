@@ -47,8 +47,15 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 % - B   : Canonical coefficients, right side.
 % - U   : Canonical variables, left side.
 % - V   : Canonical variables, right side.
-% - optionsY : Elastic net parameters for left side (Y)
-% - optionsX : Elastic net parameters for right side (X)
+% - lambdaY : Regularization parameters for left side (Y)
+% - lambdaX : Regularization parameters for right side (X)
+% - cv  : cross validation results
+% - Yr  : Y matrix (rank reduced is SVD was applied)
+% - Xr  : X matrix (rank reduced is SVD was applied)
+% - At  : Canonical coefficients transformed back to original space (only
+%         available in case SVD was applied before CCA)
+% - Bt  : Canonical coefficients transformed back to original space (only
+%         available in case SVD was applied before CCA)
 %
 % ___________________________________________
 % AM Winkler, O Renaud, SM Smith, TE Nichols
@@ -134,24 +141,29 @@ end
 
 % Dimensionality reduction
 if ncompY
-    [Y, ~, ~] = svds(Y, ncompY);
+    [Uy, Sy, Vy] = svds(Y, ncompY);
+    Yr = Uy;
+else
+    Yr = Y;
 end
 if ncompX
-    [X, ~, ~] = svds(X, ncompX);
+    [Ux, Sx, Vx] = svds(X, ncompX);
+    Xr = Ux;
+else
+    Xr = X;
 end
 
 % Initial CCA
 switch statistic
     case 'wilks'
-        Kinit = min(rank(Y),rank(X));
+        Kinit = min(rank(Yr),rank(Xr));
     case 'roy'
         Kinit = K;
 end
-[A,B,r,optionsY,optionsX] = cca(Qz*Y,Qw*X,R,S,Kinit,varargin{:});
-[A,B,r,optionsY,optionsX,cv] = cca(Qz*Y,Qw*X,R,S,Kinit,varargin{:});
+[A,B,r,lambdaY,lambdaX,cv] = cca(Qz*Yr,Qw*Xr,R,S,Kinit,varargin{:});
 K = numel(r);
-U = Y*[A null(A')];
-V = X*[B null(B')];
+U = Yr*[A null(A')];
+V = Xr*[B null(B')];
 
 % First permutation is no permutation
 fprintf('Permutation %d/%d ',1,nP);
@@ -164,7 +176,7 @@ cnt = zeros(1,K);
 lW  = zeros(1,K);
 % For each canonical variable
 for k = 1:K
-    [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,optionsY,optionsX,varargin{3:end});
+    [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
     lW(k) = lWtmp(1);
 end
 lW1 = lW;
@@ -188,24 +200,37 @@ parfor p = 2:(nP-1)
     % For each canonical variable
     lW  = zeros(1,K);
     for k = 1:K
-        [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,optionsY,optionsX,varargin{3:end});
+        [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
         lW(k) = lWtmp(1);
     end
     cnt = cnt + (lW >= lW1);
     fprintf('\n');
 end
 
+U = Qz*Yr*A;
+V = Qw*Xr*B;
 
 punc  = cnt/nP;
 varargout{1} = cummax(punc); % pfwer
 varargout{2} = r;            % canonical correlations
 varargout{3} = A;            % canonical weights (left)
 varargout{4} = B;            % canonical weights (right)
-varargout{5} = Qz*Y*A;       % canonical variables (left)
-varargout{6} = Qw*X*B;       % canonical variables (right)
-varargout{7} = optionsY;     % elastic net parameters (left)
-varargout{8} = optionsX;     % elastic net parameters (right)
+varargout{5} = U;            % canonical variables (left)
+varargout{6} = V;            % canonical variables (right)
+varargout{7} = lambdaY;      % regularization parameter (left)
+varargout{8} = lambdaX;      % regularization parameter (right)
 varargout{9} = cv;           % cross validation results
+varargout{10} = Yr;          % Y matrix (rank reduced is SVD was applied)
+varargout{11} = Xr;          % X matrix (rank reduced is SVD was applied)
+
+% transform A and B back to original dimensions
+% (this is basically least squares solution: A = pinv(Yr) * U)
+if ncompY
+    varargout{12} = pinv(Uy * Sy * Vy') * Yr*A;
+end
+if ncompX
+    varargout{13} = pinv(Ux * Sx * Vx') * Xr*B;
+end
 
 % =================================================================
 function Q = semiortho(Z,Sel)
@@ -266,9 +291,9 @@ else
 end
 
 % =================================================================
-function [A,B,cc,optionsY,optionsX,cv] = cca(Y,X,R,S,K,varargin)
+function [A,B,cc,lambdaY,lambdaX,cv] = cca(Y,X,R,S,K,varargin)
 % Compute CCA.
-%N = size(Y,1);
+N = size(Y,1);
 %[Qy,Ry,iY] = qr(Y,0);
 %[Qx,Rx,iX] = qr(X,0);
 
@@ -276,8 +301,7 @@ function [A,B,cc,optionsY,optionsX,cv] = cca(Y,X,R,S,K,varargin)
 %[L,D,M] = svds(Qy'*Qx,K);
 %cc = min(max(diag(D(:,1:K))',0),1);
 
-[~,~,A,B,cc,optionsY,optionsX,cv] = penalized_cca(Y,X,K,varargin{:});
-%[~,~,L,M,cc,optionsY,optionsX,cv] = penalized_cca(Qy,Qx,K,varargin{:});
+[~,~,A,B,cc,lambdaY,lambdaX,cv] = penalized_cca_witten(Y,X,K,varargin{:});
 
 %A  = Ry\L(:,1:K)*sqrt(N-R);
 %B  = Rx\M(:,1:K)*sqrt(N-S);
