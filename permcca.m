@@ -64,11 +64,7 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 
 % Read input arguments
 narginchk(2,18)
-%Y = varargin{1};
-%X = varargin{2};
-% if nargin >= 3
-%     nP = varargin{3};
-% end
+if nargin < 3 || isempty(nP);      nP = 1000;      end
 if nargin < 4;                     Z = [];         end
 if nargin < 5;                     W = [];         end
 if nargin < 6;                     Sel = [];       end
