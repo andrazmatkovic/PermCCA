@@ -173,14 +173,14 @@ idxX = (1:Q);
 
 % Initialise counter
 cnt = zeros(1,K);
-lW  = zeros(1,K);
+stat  = zeros(1,K);
 % For each canonical variable
 for k = 1:K
-    [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
-    lW(k) = lWtmp(1);
+    [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
+    stat(k) = stat_tmp(1);
 end
-lW1 = lW;
-cnt = cnt + (lW >= lW1);
+stat1 = stat;
+cnt = cnt + (stat >= stat1);
 fprintf('\n');
 
 % For each permutation
@@ -198,12 +198,12 @@ parfor p = 2:(nP-1)
     fprintf('Permutation %d/%d ',p,nP);
     
     % For each canonical variable
-    lW  = zeros(1,K);
+    stat  = zeros(1,K);
     for k = 1:K
-        [lWtmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
-        lW(k) = lWtmp(1);
+        [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
+        stat(k) = stat_tmp(1);
     end
-    cnt = cnt + (lW >= lW1);
+    cnt = cnt + (stat >= stat1);
     fprintf('\n');
 end
 
