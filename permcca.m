@@ -33,11 +33,17 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 %              of variables (permutations should be stored in columns).
 %              Note: number of rows should equal number of selected rows.
 % - ncompY   : (Optional) Number of components after dimensionality 
-%              reduction using SVD on left side.
+%              reduction using SVD on left side. 
+%              If ncompY < 1, number of components is selected based on amount of 
+%              variance they explain (e.g. if ncompY is 0.5, number of components 
+%              will be such that 50 % of variance is explained.)
 % - ncompX   : (Optional) Number of components after dimensionality 
 %              reduction using SVD on right side.
-% - K        : (Optional) How many components to estimate
-% - varargin : other arguments passed to penalized_cca.m; note that
+%              If ncompX < 1, number of components is selected based on amount of 
+%              variance they explain (e.g. if ncompY is 0.5, number of components 
+%              will be such that 50 % of variance is explained.)
+% - K        : (Optional) How many canonical components to estimate
+% - varargin : other arguments passed to penalized_cca_witten.m; note that
 %              cross-validation if performed only for initial CCA solution
 %
 % Outputs:
@@ -133,25 +139,37 @@ else
 end
 X = center(X);
 X = Qw'*X;
+
 Q = size(X,1);
 S = size(W,2);
 if size(permsetX,1) ~= (N - S)
-    error('Number of rows in permsetS is not valid.')
+    error('Number of rows in permsetX is not valid.')
 end
 
 % Dimensionality reduction
 if ncompY
-    [Uy, Sy, Vy] = svds(Y, ncompY);
+    if ncompY >= 1
+        [Uy, Sy, Vy] = svds(Y, ncompY);
+    else 
+        [Uy, Sy, Vy] = svds_perc(Y, ncompY);
+        fprintf('... %d components explain %.1f %% of variance in Y\n', size(Sy,1), ncompY*100);
+    end
     Yr = Uy;
 else
     Yr = Y;
 end
 if ncompX
-    [Ux, Sx, Vx] = svds(X, ncompX);
+    if ncompX >= 1
+        [Ux, Sx, Vx] = svds(X, ncompX);
+    else 
+        [Ux, Sx, Vx] = svds_perc(X, ncompX);
+        fprintf('... %d components explain %.1f %% of variance in X\n', size(Sx,1), ncompX*100);
+    end
     Xr = Ux;
 else
     Xr = X;
 end
+
 
 % Initial CCA
 switch statistic
@@ -326,3 +344,14 @@ switch statistic
         [~,~,rperm] = cca(Y,X,R,S,1,optionsY,optionsX,varargin{3:end});
         stat = rperm(1)^2;
 end
+
+function [U, S, V] = svds_perc(X, perc)
+% select number of components based on percentage of variance they explain
+% - assumes X is already centered
+[U, S, V] = svd(X, 'econ');
+totvar    = sum(diag(S.^2)); % not really variance, because it's not divided by N-1
+k         = find(cumsum(diag(S.^2)/totvar) > perc, 1, 'first');
+
+U = U(:,1:k); 
+S = S(1:k,1:k);
+V = V(:,1:k);
