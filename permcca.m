@@ -334,14 +334,14 @@ X = bsxfun(@minus,X,mean(X,1));
 X(:,icte) = [];
 
 
-function [stat] = compute_statistic(Y,X,R,S,statistic,optionsY,optionsX,varargin)
+function [stat] = compute_statistic(Y,X,R,S,statistic,lambdaY,lambdaX,varargin)
     
 switch statistic
     case 'wilks'
-        [~,~,rperm] = cca(Y,X,R,S,[],optionsY,optionsX,varargin{3:end});
+        [~,~,rperm] = cca(Y,X,R,S,[],lambdaY,lambdaX,varargin{3:end});
         stat = -fliplr(cumsum(fliplr(log(1-rperm.^2))));
     case 'roy'
-        [~,~,rperm] = cca(Y,X,R,S,1,optionsY,optionsX,varargin{3:end});
+        [~,~,rperm] = cca(Y,X,R,S,1,lambdaY,lambdaX,varargin{3:end});
         stat = rperm(1)^2;
 end
 
