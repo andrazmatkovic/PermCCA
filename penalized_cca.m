@@ -21,7 +21,7 @@ function [U,V,A,B,R,optionsX,optionsY,cv] = penalized_cca(X,Y,K,optionsX,options
 % Lambda can be optimized using grid or random search (default: grid), see
 % max_iter parameter.
 %
-% Dependns on glmnet for Matlab.
+% Depends on glmnet for Matlab.
 %
 % INPUTS
 % ======
