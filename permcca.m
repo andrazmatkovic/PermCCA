@@ -37,6 +37,7 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 %              If ncompY < 1, number of components is selected based on amount of 
 %              variance they explain (e.g. if ncompY is 0.5, number of components 
 %              will be such that 50 % of variance is explained.)
+%              If ncompY == 'parallel', Horn's parallel analysis
 % - ncompX   : (Optional) Number of components after dimensionality 
 %              reduction using SVD on right side.
 %              If ncompX < 1, number of components is selected based on amount of 
@@ -47,7 +48,8 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 %              cross-validation if performed only for initial CCA solution
 %
 % Outputs:
-% - p   : p-values, FWER corrected via closure.
+% - p   : uncorrected p-values
+% - pfwer : p-values, FWER corrected via closure.
 % - r   : Canonical correlations.
 % - A   : Canonical coefficients, left side.
 % - B   : Canonical coefficients, right side.
@@ -121,8 +123,10 @@ Y = Qz'*Y;
 P = size(Y,1);
 R = size(Z,2);
 
-if size(permsetY,1) ~= (N - R)
-    error('Number of rows in permsetY is not valid.')
+if permsetY 
+    if size(permsetY,1) ~= (N - R)
+        error('Number of rows in permsetY is not valid.')
+    end
 end
 
 % Residualise X wrt W
@@ -142,12 +146,19 @@ X = Qw'*X;
 
 Q = size(X,1);
 S = size(W,2);
-if size(permsetX,1) ~= (N - S)
-    error('Number of rows in permsetX is not valid.')
+if permsetX 
+    if size(permsetX,1) ~= (N - S)
+        error('Number of rows in permsetX is not valid.')
+    end
 end
 
 % Dimensionality reduction
 if ncompY
+    if strcmp(ncompY, 'parallel')
+        [~, k, pvar] = parallel_analysis(Y, 1000);
+        ncompY = pvar / 100;
+        fprintf('%d significant components explain %.2f %% of variance\n', k, pvar);
+    end
     if ncompY >= 1
         [Uy, Sy, Vy] = svds(Y, ncompY);
     else 
@@ -159,6 +170,11 @@ else
     Yr = Y;
 end
 if ncompX
+    if strcmp(ncompX, 'parallel')
+        [~, k, pvar] = parallel_analysis(X, 1000);
+        ncompX = pvar / 100;
+        fprintf('%d significant components explain %.2f %% of variance\n', k, pvar);
+    end
     if ncompX >= 1
         [Ux, Sx, Vx] = svds(X, ncompX);
     else 
@@ -178,7 +194,9 @@ switch statistic
     case 'roy'
         Kinit = K;
 end
+
 [A,B,r,lambdaY,lambdaX,cv] = cca(Qz*Yr,Qw*Xr,R,S,Kinit,varargin{:});
+
 K = numel(r);
 U = Yr*[A null(A')];
 V = Xr*[B null(B')];
@@ -229,25 +247,26 @@ U = Qz*Yr*A;
 V = Qw*Xr*B;
 
 punc  = cnt/nP;
-varargout{1} = cummax(punc); % pfwer
-varargout{2} = r;            % canonical correlations
-varargout{3} = A;            % canonical weights (left)
-varargout{4} = B;            % canonical weights (right)
-varargout{5} = U;            % canonical variables (left)
-varargout{6} = V;            % canonical variables (right)
-varargout{7} = lambdaY;      % regularization parameter (left)
-varargout{8} = lambdaX;      % regularization parameter (right)
-varargout{9} = cv;           % cross validation results
-varargout{10} = Yr;          % Y matrix (rank reduced is SVD was applied)
-varargout{11} = Xr;          % X matrix (rank reduced is SVD was applied)
+varargout{1} = punc;         % uncorrected p-values
+varargout{2} = cummax(punc); % pfwer
+varargout{3} = r;            % canonical correlations
+varargout{4} = A;            % canonical weights (left)
+varargout{5} = B;            % canonical weights (right)
+varargout{6} = U;            % canonical variables (left)
+varargout{7} = V;            % canonical variables (right)
+varargout{8} = lambdaY;      % regularization parameter (left)
+varargout{9} = lambdaX;      % regularization parameter (right)
+varargout{10} = cv;           % cross validation results
+varargout{11} = Yr;          % Y matrix (rank reduced is SVD was applied)
+varargout{12} = Xr;          % X matrix (rank reduced is SVD was applied)
 
 % transform A and B back to original dimensions
 % (this is basically least squares solution: A = pinv(Yr) * U)
 if ncompY
-    varargout{12} = pinv(Uy * Sy * Vy') * Yr*A;
+    varargout{13} = pinv(Uy * Sy * Vy') * Yr*A;
 end
 if ncompX
-    varargout{13} = pinv(Ux * Sx * Vx') * Xr*B;
+    varargout{14} = pinv(Ux * Sx * Vx') * Xr*B;
 end
 
 % =================================================================
