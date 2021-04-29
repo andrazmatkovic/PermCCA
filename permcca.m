@@ -264,9 +264,13 @@ varargout{12} = Xr;          % X matrix (rank reduced is SVD was applied)
 % (this is basically least squares solution: A = pinv(Yr) * U)
 if ncompY
     varargout{13} = pinv(Uy * Sy * Vy') * Yr*A;
+else
+    varargout{13} = [];
 end
 if ncompX
     varargout{14} = pinv(Ux * Sx * Vx') * Xr*B;
+else
+    varargout{14} = [];
 end
 
 % =================================================================
