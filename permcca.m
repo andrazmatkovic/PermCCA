@@ -1,9 +1,9 @@
-function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,ncompY,ncompX,K,varargin)
+function varargout = permcca(Y,X,nP,Z,W,Sel,partial,cca_type,statistic,permsetY,permsetX,ncompY,ncompX,K,varargin)
 % Permutation inference for canonical correlation
 % analysis (CCA).
 %
 % Usage:
-% [pfwer,r,A,B,U,V] = permcca(Y,X,nP,Z,W,Sel,partial,permsetY,permsetX,ncompY,ncompX,K,varargin)
+% [p,pfwer,r,A,B,U,V] = permcca(Y,X,nP,Z,W,Sel,partial,cca_type,statistic,permsetY,permsetX,ncompY,ncompX,K,varargin)
 %
 %
 % Inputs:
@@ -22,6 +22,11 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 %              rank. Use -1 to randomly select N-R (or N-S) rows.
 % - partial  : (Optional) Boolean indicating whether this is partial (true) 
 %              or part (false) CCA. Default is true, i.e., partial CCA.
+% - cca_type : (Optional) Which CCA algorithm to use:
+%              - 'conventional': SVD of the cross-correlation matrix
+%              - 'witten': penalized CCA by Witten et al. (2009) - calls 
+%                penalized_cca_witten.m
+%              [default: 'conventional']
 % - statistic: (Optional) which statistic to use for statistical testing:
 %              - 'wilks' for Wilns' lambda or
 %              - 'roy' for Roy's largest root
@@ -44,6 +49,7 @@ function varargout = permcca(Y,X,nP,Z,W,Sel,partial,statistic,permsetY,permsetX,
 %              variance they explain (e.g. if ncompY is 0.5, number of components 
 %              will be such that 50 % of variance is explained.)
 % - K        : (Optional) How many canonical components to estimate
+%              [default: maximum # of possible components ~ min(rank(Y),rank(X))]
 % - varargin : other arguments passed to penalized_cca_witten.m; note that
 %              cross-validation if performed only for initial CCA solution
 %
@@ -83,25 +89,26 @@ if nargin < 3 || isempty(nP);      nP = 1000;      end
 if nargin < 4;                     Z = [];         end
 if nargin < 5;                     W = [];         end
 if nargin < 6;                     Sel = [];       end
-if nargin < 7 || isempty(statistic); statistic = 'wilks'; end
-if nargin < 8 || isempty(partial); partial = true; end
-if nargin < 9 || isempty(permsetY)
+if nargin < 7 || isempty(partial); partial = true; end
+if nargin < 8 || isempty(cca_type); cca_type = 'conventional'; end
+if nargin < 9 || isempty(statistic); statistic = 'wilks'; end
+if nargin < 10 || isempty(permsetY)
     permsetY = false;
 else
     if size(permsetY,2) < nP
         error("permsetY does not contain enough permutations.")
     end
 end
-if nargin < 10 || isempty(permsetX)
+if nargin < 11 || isempty(permsetX)
     permsetX = false;
 else
     if size(permsetX,2) < nP
         error("permsetX does not contain enough permutations.")
     end
 end
-if nargin < 11 || isempty(ncompY); ncompY = false; end
-if nargin < 12 || isempty(ncompX); ncompX = false; end
-if nargin < 13 || isempty(K);      K      = min(rank(Y),rank(X)); end
+if nargin < 12 || isempty(ncompY); ncompY = false; end
+if nargin < 13 || isempty(ncompX); ncompX = false; end
+if nargin < 14 || isempty(K);      K      = min(rank(Y),rank(X)); end
 
 Ny = size(Y,1);
 Nx = size(X,1);
@@ -146,6 +153,7 @@ X = Qw'*X;
 
 Q = size(X,1);
 S = size(W,2);
+
 if permsetX 
     if size(permsetX,1) ~= (N - S)
         error('Number of rows in permsetX is not valid.')
@@ -195,7 +203,7 @@ switch statistic
         Kinit = K;
 end
 
-[A,B,r,lambdaY,lambdaX,cv] = cca(Qz*Yr,Qw*Xr,R,S,Kinit,varargin{:});
+[A,B,r,lambdaY,lambdaX,cv] = cca(Qz*Yr,Qw*Xr,cca_type,R,S,Kinit,varargin{:});
 
 K = numel(r);
 U = Yr*[A null(A')];
@@ -212,7 +220,7 @@ cnt = zeros(1,K);
 stat  = zeros(1,K);
 % For each canonical variable
 for k = 1:K
-    [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
+    [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),cca_type,R,S,statistic,lambdaY,lambdaX,varargin{3:end});
     stat(k) = stat_tmp(1);
 end
 stat1 = stat;
@@ -236,7 +244,7 @@ parfor p = 2:(nP-1)
     % For each canonical variable
     stat  = zeros(1,K);
     for k = 1:K
-        [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),R,S,statistic,lambdaY,lambdaX,varargin{3:end});
+        [stat_tmp] = compute_statistic(Qz*U(idxY,k:end),Qw*V(idxX,k:end),cca_type,R,S,statistic,lambdaY,lambdaX,varargin{3:end});
         stat(k) = stat_tmp(1);
     end
     cnt = cnt + (stat >= stat1);
@@ -332,22 +340,30 @@ else
 end
 
 % =================================================================
-function [A,B,cc,lambdaY,lambdaX,cv] = cca(Y,X,R,S,K,varargin)
+function [A,B,cc,lambdaY,lambdaX,cv] = cca(Y,X,cca_type,R,S,K,varargin)
 % Compute CCA.
-N = size(Y,1);
-%[Qy,Ry,iY] = qr(Y,0);
-%[Qx,Rx,iX] = qr(X,0);
+switch cca_type
+    case 'conventional'
+        N = size(Y,1);
+        [Qy,Ry,iY] = qr(Y,0);
+        [Qx,Rx,iX] = qr(X,0);
 
-%K  = min(rank(Y),rank(X));
-%[L,D,M] = svds(Qy'*Qx,K);
-%cc = min(max(diag(D(:,1:K))',0),1);
+        K  = min(rank(Y),rank(X));
+        [L,D,M] = svds(Qy'*Qx,K);
+        cc = min(max(diag(D(:,1:K))',0),1);
 
-[~,~,A,B,cc,lambdaY,lambdaX,cv] = penalized_cca_witten(Y,X,K,varargin{:});
+        A  = Ry\L(:,1:K)*sqrt(N-R);
+        B  = Rx\M(:,1:K)*sqrt(N-S);
+        A(iY,:) = A;
+        B(iX,:) = B;
 
-%A  = Ry\L(:,1:K)*sqrt(N-R);
-%B  = Rx\M(:,1:K)*sqrt(N-S);
-%A(iY,:) = A;
-%B(iX,:) = B;
+        lambdaY = []; 
+        lambdaX = []; 
+        cv = [];
+
+    case 'witten'
+        [~,~,A,B,cc,lambdaY,lambdaX,cv] = penalized_cca_witten(Y,X,K,varargin{:});
+end
 
 % =================================================================
 function X = center(X)
@@ -357,14 +373,14 @@ X = bsxfun(@minus,X,mean(X,1));
 X(:,icte) = [];
 
 
-function [stat] = compute_statistic(Y,X,R,S,statistic,lambdaY,lambdaX,varargin)
+function [stat] = compute_statistic(Y,X,cca_type,R,S,statistic,lambdaY,lambdaX,varargin)
     
 switch statistic
     case 'wilks'
-        [~,~,rperm] = cca(Y,X,R,S,[],lambdaY,lambdaX,varargin{3:end});
+        [~,~,rperm] = cca(Y,X,cca_type,R,S,[],lambdaY,lambdaX,varargin{3:end});
         stat = -fliplr(cumsum(fliplr(log(1-rperm.^2))));
     case 'roy'
-        [~,~,rperm] = cca(Y,X,R,S,1,lambdaY,lambdaX,varargin{3:end});
+        [~,~,rperm] = cca(Y,X,cca_type,R,S,1,lambdaY,lambdaX,varargin{3:end});
         stat = rperm(1)^2;
 end
 
